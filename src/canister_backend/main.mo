@@ -8,25 +8,25 @@ actor {
   private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
 
   public shared({ caller }) func subscribeAuthor(_author : Principal) : async() {
-    await _addUserSubscription(caller, _author);
-    await _addAuthorSubscriber(caller, _author);
+    await _addUserSubscriptions(caller, _author);
+    await _addAuthorSubscribers(caller, _author);
   };
 
-  public query func getAuthorSubscriber(_author : Principal) : async([Principal]) {
+  public query func getAuthorSubscribers(_author : Principal) : async([Principal]) {
     return switch (author_subscribers.get(_author)) {
       case (?subs) { subs; };
       case (_) { [] };
     };
   };
 
-  public query func getUserSubscription(_user: Principal) : async ([Principal]) {
+  public query func getUserSubscriptions(_user: Principal) : async ([Principal]) {
     return switch (user_subscriptions.get(_user)) {
       case (?subs) { subs; };
       case (_) { []; };
     };
   };
 
-  private func _addUserSubscription(_user : Principal, _author : Principal) : async() {
+  private func _addUserSubscriptions(_user : Principal, _author : Principal) : async() {
     let subscriptions = switch (user_subscriptions.get(_user)) {
       case (?subs) { subs };
       case (_) { [] };
@@ -35,7 +35,7 @@ actor {
     user_subscriptions.put(_user, updated_subscriptions);
   };
 
-  private func _addAuthorSubscriber(_user : Principal, _author : Principal) : async() {
+  private func _addAuthorSubscribers(_user : Principal, _author : Principal) : async() {
     let subscribers = switch (author_subscribers.get(_author)) {
       case (?subs) { subs };
       case (_) { [] };
