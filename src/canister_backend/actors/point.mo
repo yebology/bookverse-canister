@@ -10,21 +10,20 @@ actor class Point(_name : Text, _symbol : Text) {
     private var total_supply : Nat = 0;
     private var user_points = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
     
-    public func mint(_wallet : Principal, _amount : Nat) : async() {
-        await _addUserPoints(_wallet, _amount);
+    public func mint(_user : Principal, _amount : Nat) : async() {
+        await _addUserPoints(_user, _amount);
         await _addTotalSupply(_amount);
     };
 
-    public func burn(_wallet : Principal, _amount : Nat) : async() {
-        await _deductUserPoints(_wallet, _amount);
-        await _deductTotalSupply(_wallet, _amount);
+    public func burn(_user : Principal, _amount : Nat) : async() {
+        await _deductUserPoints(_user, _amount);
+        await _deductTotalSupply(_user, _amount);
     };
 
-    public query func getUserPoints(_wallet : Principal) : async(Nat) {
-        let current_points = user_points.get(_wallet);
-        return switch (current_points) {
-            case (?current_points) current_points;
-            case null 0;
+    public query func getUserPoints(_user : Principal) : async(Nat) {
+        return switch (user_points.get(_user)) {
+            case (?points) { points };
+            case null { 0 };
         };
     };
 
@@ -40,32 +39,31 @@ actor class Point(_name : Text, _symbol : Text) {
         return point_symbol;
     };
 
-    private func _addUserPoints(_wallet : Principal, _amount : Nat) : async() {
-        let current_points = await _getUserPoints(_wallet);
+    private func _addUserPoints(_user : Principal, _amount : Nat) : async() {
+        let current_points = await _getUserPoints(_user);
         let updated_points = current_points + _amount;
-        user_points.put(_wallet, updated_points);
+        user_points.put(_user, updated_points);
     };
 
     private func _addTotalSupply(_amount : Nat) : async() {
         total_supply += _amount;
     };
 
-    private func _deductUserPoints(_wallet : Principal, _amount : Nat) : async () {
-        let current_points = await _getUserPoints(_wallet);
+    private func _deductUserPoints(_user : Principal, _amount : Nat) : async () {
+        let current_points = await _getUserPoints(_user);
         assert(current_points >= _amount);
         let updated_points = current_points - _amount;
-        user_points.put(_wallet, updated_points);
+        user_points.put(_user, updated_points);
     };
 
-    private func _deductTotalSupply(_wallet : Principal, _amount : Nat) : async () {
+    private func _deductTotalSupply(_user : Principal, _amount : Nat) : async () {
         total_supply -= _amount;
     };
  
-    private func _getUserPoints(_wallet : Principal) : async(Nat) {
-        let current_points = user_points.get(_wallet);
-        return switch (current_points) {
-            case (?current_points) current_points;
-            case null 0;
+    private query func _getUserPoints(_user : Principal) : async(Nat) {
+        return switch (user_points.get(_user)) {
+            case (?points) { points };
+            case null { 0 };
         };
     };
 }
