@@ -20,6 +20,11 @@ class Point(_name : Text, _symbol : Text) {
         _deductTotalSupply(_user, _amount);
     };
 
+    public func transfer(_from : Principal, _to : Principal, _amount : Nat) : () {
+        _deductUserPoints(_from, _amount);
+        _addUserPoints(_to, _amount);
+    };
+
     public func getUserPoints(_user : Principal) : (Nat) {
         return _getUserPoints(_user);
     };
@@ -60,7 +65,7 @@ class Point(_name : Text, _symbol : Text) {
     private func _getUserPoints(_user : Principal) : (Nat) {
         return switch (user_points.get(_user)) {
             case (?points) { points };
-            case null { 0 };
+            case (null) { 0 };
         };
     };
 }
