@@ -2,20 +2,25 @@ import HashMap "mo:base/HashMap";
 import Principal "mo:base/Principal";
 import Array "mo:base/Array";
 import Error "mo:base/Error";
-// import Debug "mo:base/Debug";
-// import Type "types/type";
+import Debug "mo:base/Debug";
+import Bool "mo:base/Bool";
+import Type "types/type";
 import PointClass "class/point";
 
 // make normal actor again after testing
 actor class Main() {
 
   private type Point = PointClass.Point;
+  private type Task = Type.Task;
 
   private var point : Point = PointClass.Point("BookPoint", "BP");
+  private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
 
+  private var tasks : [Task] = [];
   private var user_subscriptions = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var subscription_price = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
+  private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
 
   // delete after testing
   public func dummyMint(caller : Principal, _amount : Nat) : async() {
@@ -23,6 +28,7 @@ actor class Main() {
   };
 
   public shared({ caller }) func goPremium(_price : Nat) : async () {
+    Debug.print(Principal.toText(caller));
     await _checkSubscriptionPrice(_price);
     await _addSubscriptionPrice(caller, _price);
   };
@@ -34,17 +40,31 @@ actor class Main() {
     await _addAuthorSubscribers(caller, _author);
   };
 
-  public query func getAuthorSubscribers(_author : Principal) : async([Principal]) {
+  public shared({ caller }) func addTask(name : Text, url : Text, point : Nat) : async() {
+    await _onlyOwner(caller);
+    await _checkTaskInput(name, url, point);
+    await _addTaskInput(name, url, point);
+  };
+
+  public shared({ caller }) func doTask(_id : Nat) : async() {
+    let (is_there, gain) = await _checkExistingTask(_id);
+    if (is_there) {
+      await _addCompletedTask(caller, _id);
+      await _addUserPointFromTask(caller, gain);
+    }
+  };
+
+  public query func getAuthorSubscribers(_author : Principal) : async(Nat) {
     return switch (author_subscribers.get(_author)) {
-      case (?subs) { subs; };
-      case (null) { [] };
+      case (?subs) { subs.size(); };
+      case (null) { 0 };
     };
   };
 
-  public query func getUserSubscriptions(_user: Principal) : async([Principal]) {
+  public query func getUserSubscriptions(_user: Principal) : async(Nat) {
     return switch (user_subscriptions.get(_user)) {
-      case (?subs) { subs; };
-      case (null) { []; };
+      case (?subs) { subs.size(); };
+      case (null) { 0; };
     };
   };
 
@@ -55,8 +75,31 @@ actor class Main() {
     };
   };
 
+  public query func getTasks() : async([Task]) {
+    return tasks;
+  };
+
+  public query func getCompletedTasks(_user : Principal) : async([Nat]) {
+    return switch (completed_tasks.get(_user)) {
+      case (?complete) { complete };
+      case (null) { []; };
+    }
+  };
+
   public query func getUserPoints(_user : Principal) : async(Nat) {
     return point.getUserPoints(_user);
+  };
+
+  private func _onlyOwner(_user : Principal) : async() {
+    if (owner != _user) {
+      throw Error.reject("Invalid owner.");
+    }
+  };
+
+  private func _checkTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
+    if (_name == "" or _url == "" or _point <= 0) {
+      throw Error.reject("Invalid task input.");
+    }
   };
 
   private func _hasEnoughPoints(_require: Nat, _amount: Nat) : async() {
@@ -65,10 +108,42 @@ actor class Main() {
     }
   };
 
+  private func _checkExistingTask(_id : Nat) : async(Bool, Nat) {
+    return switch (Array.find<Task>(tasks, func(x : Task) {
+      x.id == _id
+    })) {
+      case (?founded) { (true, founded.point); };
+      case (null) { throw Error.reject("Task id not found."); };
+    };
+  };
+
   private func _checkSubscriptionPrice(_price : Nat) : async() {
     if (_price <= 0) {
         throw Error.reject("Invalid subscription price.");
     };
+  };
+
+  private func _addTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
+    let task : Task = {
+      id = tasks.size();
+      name = _name;
+      url = _url;
+      point = _point;
+    };
+    tasks := Array.append(tasks, [task]);
+  };
+
+  private func _addCompletedTask(_user : Principal, _id : Nat) : async() {
+    let completed = switch(completed_tasks.get(_user)) {
+      case (?tasks) { tasks };
+      case (null) { [] };
+    };
+    let updated = Array.append(completed, [_id]);
+    completed_tasks.put(_user, updated); 
+  };
+
+  private func _addUserPointFromTask(_user : Principal, _gain : Nat) : async() {
+    point.mint(_user, _gain);
   };
 
   private func _addSubscriptionPrice(_author : Principal, _amount : Nat) : async() {
@@ -85,7 +160,7 @@ actor class Main() {
     await _movePoint(_user, _author, require);
   };
 
-  private func _movePoint(_user : Principal, _author : Principal, _amount : Nat) : async () {
+  private func _movePoint(_user : Principal, _author : Principal, _amount : Nat) : async() {
     point.transfer(_user, _author, _amount);
   };
 
@@ -94,8 +169,8 @@ actor class Main() {
       case (?subs) { subs };
       case (null) { [] };
     };
-    let updated_subscriptions = Array.append(subscriptions, [_author]);
-    user_subscriptions.put(_user, updated_subscriptions);
+    let updated = Array.append(subscriptions, [_author]);
+    user_subscriptions.put(_user, updated);
   };
 
   private func _addAuthorSubscribers(_user : Principal, _author : Principal) : async() {
@@ -103,8 +178,8 @@ actor class Main() {
       case (?subs) { subs };
       case (null) { [] };
     };
-    let updated_subscribers = Array.append(subscribers, [_user]);
-    author_subscribers.put(_author, updated_subscribers);
+    let updated = Array.append(subscribers, [_user]);
+    author_subscribers.put(_author, updated);
   };
 
   private query func _getSubscriptionPrice(_author : Principal) : async(Nat) {
@@ -113,16 +188,5 @@ actor class Main() {
       case (null) { throw Error.reject("Invalid author.") }
     };
   };
-
-  // private query func _getGiftPrice(_id: Nat) : async(Nat) {
-  //   let found_gift = Array.find<Gift>(gifts, func (x : Gift) {
-  //     return x.id == _id;
-  //   });
-
-  //   switch (found_gift) {
-  //     case (?gift) { return gift.price; };
-  //     case (_) { throw Error.reject("Invalid gift id!"); };
-  //   };
-  // }
 
 };

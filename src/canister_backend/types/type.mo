@@ -2,10 +2,10 @@ import Text "mo:base/Text";
 import Nat "mo:base/Nat";
 
 module {
-    public type Gift = {
+    public type Task = {
         id: Nat;
-        image: Text;
         name: Text;
-        price: Nat;
+        url: Text;
+        point: Nat;
     };
 };
