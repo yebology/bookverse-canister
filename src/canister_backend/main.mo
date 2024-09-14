@@ -12,13 +12,16 @@ actor class Main() {
 
   private type Point = PointClass.Point;
   private type Task = Type.Task;
-
+  private type Book = Type.Book;
   private var point : Point = PointClass.Point("BookPoint", "BP");
   private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
 
   private var tasks : [Task] = [];
+  private var books : [Book] = [];
   private var user_subscriptions = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
+  private var user_bookmarks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
+  private var author_books = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var subscription_price = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
   private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
 
@@ -52,6 +55,19 @@ actor class Main() {
       await _addCompletedTask(caller, _id);
       await _addUserPointFromTask(caller, gain);
     }
+  };
+ 
+  public shared({ caller }) func addToBookmark(_id : Nat) : async(){
+      await _addBookToUserBookmark(caller, _id);
+  };
+
+  public shared({ caller }) func removeFromBookmark(_id : Nat) : async(){
+      await _removeBookFromUserBookmark(caller, _id);
+  };
+
+  public shared({ caller }) func addBook(title: Text, synopsis: Text, year: Nat, genre: Text, cover: Text, file: Text) : async() {
+      await _checkBookInput(title, synopsis, year, genre, cover, file);
+      await _addBookInput(title, synopsis, year, genre, caller, cover, file)
   };
 
   public query func getAuthorSubscribers(_author : Principal) : async(Nat) {
@@ -90,6 +106,25 @@ actor class Main() {
     return point.getUserPoints(_user);
   };
 
+  public query func getBooks() : async([Book]) {
+    return books;
+  };
+
+  public query func getBookmarks(_user : Principal) : async([Nat]) {
+    return switch (user_bookmarks.get(_user)) {
+      case (?bookmarks) { bookmarks };
+      case (null) { []; };
+    }
+  };
+
+public query func getUploadedBooks(_user: Principal) : async [Book] {
+    let userBooks = Array.filter<Book>(books, func (book: Book) : Bool {
+        book.author == _user
+    });
+
+    return userBooks;
+};
+
   private func _onlyOwner(_user : Principal) : async() {
     if (owner != _user) {
       throw Error.reject("Invalid owner.");
@@ -99,18 +134,18 @@ actor class Main() {
   private func _checkTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
     if (_name == "" or _url == "" or _point <= 0) {
       throw Error.reject("Invalid task input.");
-    }
+    };
   };
 
   private func _hasEnoughPoints(_require: Nat, _amount: Nat) : async() {
     if (_amount < _require) {
       throw Error.reject("Not enough points.");
-    }
+    };
   };
 
   private func _checkExistingTask(_id : Nat) : async(Bool, Nat) {
     return switch (Array.find<Task>(tasks, func(x : Task) {
-      x.id == _id
+      x.id == _id;
     })) {
       case (?founded) { (true, founded.point); };
       case (null) { throw Error.reject("Task id not found."); };
@@ -121,6 +156,27 @@ actor class Main() {
     if (_price <= 0) {
         throw Error.reject("Invalid subscription price.");
     };
+  };
+
+  private func _checkBookInput(_title: Text, _synopsis: Text, _year: Nat, _genre: Text, _cover: Text, _file: Text) : async() {
+    if (_title == "" or _synopsis == "" or _year == 0 or _genre == "" or _cover == "" or _file == ""){
+      throw Error.reject("Invalid book input.");
+    };
+  };
+
+  private func _addBookInput(_title : Text, _synopsis : Text, _year : Nat, _genre : Text, _author : Principal, _cover : Text, _file : Text) : async(){
+    let book : Book = {
+        id = books.size();
+        title = _title;
+        synopsis = _synopsis;
+        year = _year;
+        genre = _genre;
+        author = _author;
+        cover = _cover;
+        readers = 0;
+        file = _file;
+    };
+    books := Array.append(books, [book]);
   };
 
   private func _addTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
@@ -189,4 +245,26 @@ actor class Main() {
     };
   };
 
+  private func _addBookToUserBookmark(_user : Principal, _id : Nat) : async() {
+    let bookmarks = switch (user_bookmarks.get(_user)) {
+      case (?books) { books };
+      case (null) { [] };
+    };
+
+      let updated = Array.append(bookmarks, [_id]);
+      user_bookmarks.put(_user, updated);
+  };
+
+  private func _removeBookFromUserBookmark(_user: Principal, _id: Nat) : async () {
+    let bookmarks = switch (user_bookmarks.get(_user)) {
+        case (?books) { books };
+        case null { [] };
+    };
+
+    let updated = Array.filter<Nat>(bookmarks, func (book: Nat) : Bool {
+        book != _id
+    });
+
+    user_bookmarks.put(_user, updated);
+  };
 };
