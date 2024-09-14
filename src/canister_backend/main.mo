@@ -4,6 +4,7 @@ import Array "mo:base/Array";
 import Error "mo:base/Error";
 import Debug "mo:base/Debug";
 import Bool "mo:base/Bool";
+import Text "mo:base/Text";
 import Type "types/type";
 import PointClass "class/point";
 
@@ -17,10 +18,20 @@ actor class Main() {
   private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
 
   private var tasks : [Task] = [];
+  private var genres : [Text] = [
+    "Horror", "Science Fiction", "Mystery", 
+    "Dystopian", "Utopian", "Fantasy", 
+    "Romance", "Fiction", "Non-Fiction", 
+    "Thriller", "Adventure", "Crime", 
+    "Comedy", "Western", "Biography", 
+    "History", "Sports", "Cooking", "Art"  
+  ];
+
   private var user_subscriptions = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var subscription_price = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
   private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
+  private var current_book = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
 
   // delete after testing
   public func dummyMint(caller : Principal, _amount : Nat) : async() {
@@ -28,7 +39,7 @@ actor class Main() {
   };
 
   public shared({ caller }) func goPremium(_price : Nat) : async () {
-    Debug.print(Principal.toText(caller));
+    Debug.print(Principal.toText(caller)); // delete before deploy
     await _checkSubscriptionPrice(_price);
     await _addSubscriptionPrice(caller, _price);
   };
@@ -38,6 +49,10 @@ actor class Main() {
     await _paySubscriptions(caller, _author);
     await _addUserSubscriptions(caller, _author);
     await _addAuthorSubscribers(caller, _author);
+  };
+
+  public shared({ caller }) func addCurrentBook(_id : Nat) : async() {
+    await _addCurrentBook(caller, _id);
   };
 
   public shared({ caller }) func addTask(name : Text, url : Text, point : Nat) : async() {
@@ -75,6 +90,13 @@ actor class Main() {
     };
   };
 
+  public query func getCurrentBook(_user: Principal) : async(Bool, Nat) {
+    return switch (current_book.get(_user)) {
+      case (?book) { (true, book); };
+      case (null) { (false, 0); };
+    }
+  };
+
   public query func getTasks() : async([Task]) {
     return tasks;
   };
@@ -86,7 +108,7 @@ actor class Main() {
     }
   };
 
-  public query func getUserPoints(_user : Principal) : async(Nat) {
+  public query func getPoints(_user : Principal) : async(Nat) {
     return point.getUserPoints(_user);
   };
 
@@ -131,6 +153,10 @@ actor class Main() {
       point = _point;
     };
     tasks := Array.append(tasks, [task]);
+  };
+
+  private func _addCurrentBook(_user : Principal, _id : Nat) : async() {
+    current_book.put(_user, _id);
   };
 
   private func _addCompletedTask(_user : Principal, _id : Nat) : async() {

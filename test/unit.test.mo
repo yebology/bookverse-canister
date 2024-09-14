@@ -12,8 +12,8 @@ await test("successfully author go premium and user can subscribe author", func(
     await instance.dummyMint(user, 100);
     await instance.goPremium(10);
     await instance.subscribeAuthor(user, author);
-    let authorBalance = await instance.getUserPoints(author);
-    let userBalance = await instance.getUserPoints(user);
+    let authorBalance = await instance.getPoints(author);
+    let userBalance = await instance.getPoints(user);
     let subscription = await instance.getUserSubscriptions(user);
     let subscriber = await instance.getAuthorSubscribers(author);
     assert(10 == authorBalance);
@@ -30,11 +30,24 @@ await test("successfully add task and do task", func() : async() {
     let tasks = await instance.getTasks();
     let completed = await instance.getCompletedTasks(author);
     let completed_index = completed[0];
-    let userPoint = await instance.getUserPoints(author);
+    let userPoint = await instance.getPoints(author);
     assert(2 == tasks.size());
     assert(1 == completed.size());
     assert(1 == completed_index);
     assert(10 == userPoint);
+});
+
+// wait for hayya
+await test("successfully get current book", func() : async() {
+    let instance = await Actor.Main();
+    // create book 
+    let (is_there, current_book) = await instance.getCurrentBook(author);
+    if (is_there) {
+        assert(0 == current_book);
+    }
+    else {
+        throw Error.reject("Book not found.");
+    }
 });
 
 await test("successfully throw invalid task input", func() : async() {
