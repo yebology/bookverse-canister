@@ -18,7 +18,6 @@ module {
         genre: Text;
         author: Principal;
         cover: Text;
-        readers: Nat;
         file: Text;
     };
 };

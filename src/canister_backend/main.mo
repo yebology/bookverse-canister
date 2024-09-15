@@ -2,22 +2,24 @@ import HashMap "mo:base/HashMap";
 import Principal "mo:base/Principal";
 import Array "mo:base/Array";
 import Error "mo:base/Error";
-import Debug "mo:base/Debug";
 import Bool "mo:base/Bool";
 import Text "mo:base/Text";
+import Hash "mo:base/Hash";
+import Nat "mo:base/Nat";
 import Type "types/type";
 import PointClass "class/point";
 
-// make normal actor again after testing
-actor class Main() {
+actor {
 
   private type Point = PointClass.Point;
   private type Task = Type.Task;
+  private type Book = Type.Book;
 
   private var point : Point = PointClass.Point();
-  private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
 
   private var tasks : [Task] = [];
+  private var books : [Book] = [];
+
   private var genres : [Text] = [
     "Horror", "Science Fiction", "Mystery", 
     "Dystopian", "Utopian", "Fantasy", 
@@ -27,50 +29,36 @@ actor class Main() {
     "History", "Sports", "Cooking", "Art"  
   ];
 
-  private type Book = Type.Book;
-  private var point : Point = PointClass.Point("BookPoint", "BP");
-  private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
+  private var key = "";
 
-  private var tasks : [Task] = [];
-  private var books : [Book] = [];
   private var user_subscriptions = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var user_bookmarks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
-  private var author_books = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var subscription_price = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
   private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var current_book = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
-
-  // delete after testing
-  public func dummyMint(caller : Principal, _amount : Nat) : async() {
-    point.mint(caller, 100);
-  };
+  private var book_readers = HashMap.HashMap<Nat, Nat>(0, Nat.equal, Hash.hash);
 
   public shared({ caller }) func goPremium(_price : Nat) : async () {
-    Debug.print(Principal.toText(caller)); // delete before deploy
     await _checkSubscriptionPrice(_price);
     await _addSubscriptionPrice(caller, _price);
   };
 
-  // change to shared caller again after testing
-  public func subscribeAuthor(caller : Principal, _author : Principal) : async() {
+  public shared({ caller }) func subscribeAuthor( _author : Principal) : async() {
     await _paySubscriptions(caller, _author);
     await _addUserSubscriptions(caller, _author);
     await _addAuthorSubscribers(caller, _author);
   };
 
-  public func readBook(_id : Nat) : async() {
-    // wait for hayya push
-  };
-
-  public shared({ caller }) func addCurrentBook(_id : Nat) : async() {
+  public shared({ caller }) func readBook(_id : Nat) : async() {
+    await _readBook(_id);
     await _addCurrentBook(caller, _id);
   };
 
-  public shared({ caller }) func addTask(name : Text, url : Text, point : Nat) : async() {
-    await _onlyOwner(caller);
-    await _checkTaskInput(name, url, point);
-    await _addTaskInput(name, url, point);
+  public func addTask(_name : Text, _url : Text, _point : Nat, _key : Text) : async() {
+    await _onlyOwner(_key);
+    await _checkTaskInput(_name, _url, _point);
+    await _addTaskInput(_name, _url, _point);
   };
 
   public shared({ caller }) func doTask(_id : Nat) : async() {
@@ -80,7 +68,7 @@ actor class Main() {
       await _addUserPointFromTask(caller, gain);
     }
   };
- 
+
   public shared({ caller }) func addToBookmark(_id : Nat) : async(){
       await _addBookToUserBookmark(caller, _id);
   };
@@ -106,6 +94,13 @@ actor class Main() {
       case (?subs) { subs.size(); };
       case (null) { 0; };
     };
+  };
+
+  public query func getBookReaders(_id : Nat) : async(Nat) {
+    return switch(book_readers.get(_id)) {
+      case (?founded) { founded; };
+      case (null) { 0; };
+    }
   };
 
   public query func getSubscriptionPrice(_author: Principal) : async(Nat) {
@@ -160,10 +155,13 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     return userBooks;
 };
 
-  private func _onlyOwner(_user : Principal) : async() {
-    if (owner != _user) {
-      throw Error.reject("Invalid owner.");
+  private func _onlyOwner(_key : Text) : async() {
+    if (key == "") {
+      key := _key;
     }
+    else if (key != _key) {
+      throw Error.reject("Non-authorized owner.");
+    };
   };
 
   private func _checkTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
@@ -199,6 +197,23 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     };
   };
 
+  private func _readBook(_id : Nat) : async() {
+    let book_exist = Array.find<Book>(books, func(x : Book) { x.id == _id });
+    if (book_exist == null) {
+      throw Error.reject("Book id not found.");
+    };
+    
+    switch (book_readers.get(_id)) {
+      case (?founded) {
+        let updated_readers = founded + 1;
+          book_readers.put(_id, updated_readers);
+        };
+      case (null) {
+        book_readers.put(_id, 1);
+      }
+    }
+  };
+
   private func _addBookInput(_title : Text, _synopsis : Text, _year : Nat, _genre : Text, _author : Principal, _cover : Text, _file : Text) : async(){
     let book : Book = {
         id = books.size();
@@ -208,7 +223,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
         genre = _genre;
         author = _author;
         cover = _cover;
-        readers = 0;
         file = _file;
     };
     books := Array.append(books, [book]);
@@ -289,7 +303,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
       case (?books) { books };
       case (null) { [] };
     };
-
       let updated = Array.append(bookmarks, [_id]);
       user_bookmarks.put(_user, updated);
   };
@@ -299,11 +312,9 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
         case (?books) { books };
         case null { [] };
     };
-
     let updated = Array.filter<Nat>(bookmarks, func (book: Nat) : Bool {
         book != _id
     });
-
     user_bookmarks.put(_user, updated);
   };
 };

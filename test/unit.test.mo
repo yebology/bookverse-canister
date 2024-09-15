@@ -24,8 +24,8 @@ await test("successfully author go premium and user can subscribe author", func(
 
 await test("successfully add task and do task", func() : async() {
     let instance = await Actor.Main();
-    await instance.addTask("Lorem ipsum", "https://lorem", 20);
-    await instance.addTask("Dolor sit amet", "https://lorem", 10);
+    await instance.addTask("Lorem ipsum", "https://lorem", 20, "Joren");
+    await instance.addTask("Dolor sit amet", "https://lorem", 10, "Joren");
     await instance.doTask(1);
     let tasks = await instance.getTasks();
     let completed = await instance.getCompletedTasks(author);
@@ -40,10 +40,16 @@ await test("successfully add task and do task", func() : async() {
 // wait for hayya
 await test("successfully get current book", func() : async() {
     let instance = await Actor.Main();
-    // create book 
+    await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+    await instance.readBook(0);
     let (is_there, current_book) = await instance.getCurrentBook(author);
+    let book_readers = await instance.getBookReaders(0);
+    Debug.print(debug_show(book_readers));
+    Debug.print(debug_show(current_book));
+    Debug.print(debug_show(is_there));
     if (is_there) {
         assert(0 == current_book);
+        assert(1 == book_readers);
     }
     else {
         throw Error.reject("Book not found.");
@@ -53,7 +59,7 @@ await test("successfully get current book", func() : async() {
 await test("successfully throw invalid task input", func() : async() {
     try {
         let instance = await Actor.Main();
-        await instance.addTask("", "https://lorem", 0);
+        await instance.addTask("", "https://lorem", 0, "");
     }
     catch(err) {
         let message = Error.message(err);
