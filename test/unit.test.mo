@@ -41,14 +41,11 @@ await test("successfully add task and do task", func() : async() {
 await test("successfully get current book", func() : async() {
     let instance = await Actor.Main();
     await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
-    await instance.readBook(0);
+    await instance.readBook("Test");
     let (is_there, current_book) = await instance.getCurrentBook(author);
-    let book_readers = await instance.getBookReaders(0);
-    Debug.print(debug_show(book_readers));
-    Debug.print(debug_show(current_book));
-    Debug.print(debug_show(is_there));
+    let book_readers = await instance.getBookReaders("Test");
     if (is_there) {
-        assert(0 == current_book);
+        assert("Test" == current_book);
         assert(1 == book_readers);
     }
     else {
