@@ -120,3 +120,43 @@ await test("successfully throw already premium", func() : async() {
         assert(message == "Already Premium.");
     }
 });
+
+await test("successfully add a book and get books", func() : async() {
+        let instance = await Actor.Main();
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        let uploaded = await instance.getUploadedBooks(author);
+        assert(uploaded.size() == 1);
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        let allbooks = await instance.getBooks();
+        assert(allbooks.size() == 2);
+}); 
+
+await test("successfully added a book to bookmarks", func() : async() {
+        let instance = await Actor.Main();
+        await instance.addToBookmark(1);
+        let bookmarked = await instance.getBookmarks(author);
+        assert(bookmarked.size() == 1);
+});
+
+await test("removed book from bookmarks", func() : async() {
+        let instance = await Actor.Main();
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        await instance.addToBookmark(1);
+        let bookmarked = await instance.getBookmarks(author);
+        await instance.removeFromBookmark(1);
+        let removed = await instance.getBookmarks(author);
+        assert(bookmarked.size() == 1);
+        assert(removed.size() == 0);
+}); 
+
+await test("successfully throw invalid add a book", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.addBook("", "", 2000, "Genre", "Cover", "File");
+    }
+    catch(err) {
+        let message = Error.message(err);
+        assert(message == "Invalid book input.");
+    }
+}); 
+
