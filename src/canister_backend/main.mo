@@ -279,7 +279,7 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     let current_points =  await _getUserPoints(_user);
     switch (current_points >= _amount) {
       case (true) { 
-        let updated_points = current_points - _amount;
+        let updated_points = (current_points - _amount) : Nat;
         user_points.put(_user, updated_points);
       };
       case (false) {
@@ -306,7 +306,7 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     author_subscribers.put(_author, updated);
   };
 
-  private query func _getSubscriptionPrice(_author : Principal) : async(Nat) {
+  private func _getSubscriptionPrice(_author : Principal) : async(Nat) {
     return switch (subscription_price.get(_author)) {
       case (?price) { price };
       case (null) { throw Error.reject("Invalid author.") }
