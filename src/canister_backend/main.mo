@@ -14,7 +14,7 @@ actor class Main() {
   private type Point = PointClass.Point;
   private type Task = Type.Task;
 
-  private var point : Point = PointClass.Point("BookPoint", "BP");
+  private var point : Point = PointClass.Point();
   private var owner : Principal = Principal.fromText("wo5qg-ysjiq-5da"); // change before deploy
 
   private var tasks : [Task] = [];
@@ -49,6 +49,10 @@ actor class Main() {
     await _paySubscriptions(caller, _author);
     await _addUserSubscriptions(caller, _author);
     await _addAuthorSubscribers(caller, _author);
+  };
+
+  public func readBook(_id : Nat) : async() {
+    // wait for hayya push
   };
 
   public shared({ caller }) func addCurrentBook(_id : Nat) : async() {
@@ -99,6 +103,10 @@ actor class Main() {
 
   public query func getTasks() : async([Task]) {
     return tasks;
+  };
+
+  public query func getGenres() : async([Text]) {
+    return genres;
   };
 
   public query func getCompletedTasks(_user : Principal) : async([Nat]) {

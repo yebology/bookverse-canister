@@ -3,10 +3,8 @@ import Nat "mo:base/Nat";
 import Principal "mo:base/Principal";
 import HashMap "mo:base/HashMap";
 
-class Point(_name : Text, _symbol : Text) {
+class Point() {
 
-    private let point_name : Text = _name;
-    private let point_symbol : Text = _symbol;
     private var total_supply : Nat = 0;
     private var user_points = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
     
@@ -31,14 +29,6 @@ class Point(_name : Text, _symbol : Text) {
 
     public func getTotalSupply() : (Nat) {
         return total_supply;
-    };
-
-    public func getPointName() : (Text) {
-        return point_name;
-    };
-
-    public func getPointSymbol() : (Text) {
-        return point_symbol;
     };
 
     private func _addUserPoints(_user : Principal, _amount : Nat) : () {
