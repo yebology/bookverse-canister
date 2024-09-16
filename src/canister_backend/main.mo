@@ -27,34 +27,19 @@ actor {
   private var key = "";
 
   private var user_points = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
-  private var user_subscriptions = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
   private var user_bookmarks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
-  private var author_subscribers = HashMap.HashMap<Principal, [Principal]>(0, Principal.equal, Principal.hash);
-  private var subscription_price = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
   private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var current_book = HashMap.HashMap<Principal, Text>(0, Principal.equal, Principal.hash);
   private var book_readers = HashMap.HashMap<Text, Nat>(0, Text.equal, Text.hash);
-
-  public shared({ caller }) func goPremium(_price : Nat) : async () {
-    await _checkSubscriptionPrice(_price);
-    await _addSubscriptionPrice(caller, _price);
-  };
-
-  public shared({ caller }) func subscribeAuthor(_author : Principal) : async() {
-    await _paySubscriptions(caller, _author);
-    await _addUserSubscriptions(caller, _author);
-    await _addAuthorSubscribers(caller, _author);
-  };
 
   public shared({ caller }) func readBook(_title : Text) : async() {
     await _readBook(_title);
     await _addCurrentBook(caller, _title);
   };
 
-  public func addTask(_name : Text, _url : Text, _point : Nat, _key : Text) : async() {
-    await _onlyOwner(_key);
-    await _checkTaskInput(_name, _url, _point);
-    await _addTaskInput(_name, _url, _point);
+  public shared({ caller }) func donateToAuthor(_author : Principal, _amount : Nat) : async() {
+    await _checkUserPoints(caller, _amount);
+    await _transferPoint(caller, _author, _amount);
   };
 
   public shared({ caller }) func doTask(_id : Nat) : async() {
@@ -78,18 +63,10 @@ actor {
       await _addBookInput(title, synopsis, year, genre, caller, cover, file)
   };
 
-  public query func getAuthorSubscribers(_author : Principal) : async(Nat) {
-    return switch (author_subscribers.get(_author)) {
-      case (?subs) { subs.size(); };
-      case (null) { 0 };
-    };
-  };
-
-  public query func getUserSubscriptions(_user: Principal) : async(Nat) {
-    return switch (user_subscriptions.get(_user)) {
-      case (?subs) { subs.size(); };
-      case (null) { 0; };
-    };
+  public func addTask(_name : Text, _url : Text, _point : Nat, _key : Text) : async() {
+    await _onlyOwner(_key);
+    await _checkTaskInput(_name, _url, _point);
+    await _addTaskInput(_name, _url, _point);
   };
 
   public query func getBookReaders(_title : Text) : async(Nat) {
@@ -97,13 +74,6 @@ actor {
       case (?founded) { founded; };
       case (null) { 0; };
     }
-  };
-
-  public query func getSubscriptionPrice(_author: Principal) : async(Nat) {
-    return switch (subscription_price.get(_author)) {
-      case (?price) { price };
-      case (null) { throw Error.reject("Invalid author.") }
-    };
   };
 
   public query func getCurrentBook(_user: Principal) : async(Bool, Text) {
@@ -163,15 +133,22 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     };
   };
 
+  private func _checkUserPoints(_user : Principal, _amount : Nat) : async() {
+    switch (user_points.get(_user)) {
+      case (?points) { 
+        if (points < _amount) {
+          throw Error.reject("Insufficient points.");
+        }
+      };
+      case (null) { 
+        throw Error.reject("Insufficient points.");
+      }
+    }
+  };
+
   private func _checkTaskInput(_name : Text, _url : Text, _point : Nat) : async() {
     if (_name == "" or _url == "" or _point <= 0) {
       throw Error.reject("Invalid task input.");
-    };
-  };
-
-  private func _hasEnoughPoints(_require: Nat, _amount: Nat) : async() {
-    if (_amount < _require) {
-      throw Error.reject("Not enough points.");
     };
   };
 
@@ -181,12 +158,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     })) {
       case (?founded) { (true, founded.point); };
       case (null) { throw Error.reject("Task id not found."); };
-    };
-  };
-
-  private func _checkSubscriptionPrice(_price : Nat) : async() {
-    if (_price <= 0) {
-        throw Error.reject("Invalid subscription price.");
     };
   };
 
@@ -250,20 +221,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     completed_tasks.put(_user, updated); 
   };
 
-  private func _addSubscriptionPrice(_author : Principal, _amount : Nat) : async() {
-      switch (subscription_price.get(_author)) {
-        case (null) { subscription_price.put(_author, _amount); };
-        case (?_) { throw Error.reject("Already Premium.") };
-    };
-  };
-
-  private func _paySubscriptions(_user : Principal, _author : Principal) : async() {
-    let require = await _getSubscriptionPrice(_author);
-    let amount = await _getUserPoints(_user);
-    await _hasEnoughPoints(require, amount);
-    await _transferPoint(_user, _author, require);
-  };
-
   private func _transferPoint(_from : Principal, _to : Principal, _amount : Nat) : async() {
     await _burnPoint(_from, _amount);
     await _mintPoint(_to, _amount);
@@ -285,31 +242,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
       case (false) {
         throw Error.reject("Not enough point.")
        };
-    };
-  };
-
-  private func _addUserSubscriptions(_user : Principal, _author : Principal) : async() {
-    let subscriptions = switch (user_subscriptions.get(_user)) {
-      case (?subs) { subs };
-      case (null) { [] };
-    };
-    let updated = Array.append(subscriptions, [_author]);
-    user_subscriptions.put(_user, updated);
-  };
-
-  private func _addAuthorSubscribers(_user : Principal, _author : Principal) : async() {
-    let subscribers = switch (author_subscribers.get(_author)) {
-      case (?subs) { subs };
-      case (null) { [] };
-    };
-    let updated = Array.append(subscribers, [_user]);
-    author_subscribers.put(_author, updated);
-  };
-
-  private func _getSubscriptionPrice(_author : Principal) : async(Nat) {
-    return switch (subscription_price.get(_author)) {
-      case (?price) { price };
-      case (null) { throw Error.reject("Invalid author.") }
     };
   };
 
