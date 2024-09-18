@@ -31,8 +31,11 @@ actor {
   private var completed_tasks = HashMap.HashMap<Principal, [Nat]>(0, Principal.equal, Principal.hash);
   private var current_book = HashMap.HashMap<Principal, Text>(0, Principal.equal, Principal.hash);
   private var book_readers = HashMap.HashMap<Text, Nat>(0, Text.equal, Text.hash);
+  private var donation_total = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
+  private var donation_amount = HashMap.HashMap<Principal, Nat>(0, Principal.equal, Principal.hash);
 
   public shared({ caller }) func readBook(_title : Text) : async() {
+    await _checkExistingBookByTitle(_title);
     await _readBook(_title);
     await _addCurrentBook(caller, _title);
   };
@@ -40,22 +43,41 @@ actor {
   public shared({ caller }) func donateToAuthor(_author : Principal, _amount : Nat) : async() {
     await _checkUserPoints(caller, _amount);
     await _transferPoint(caller, _author, _amount);
+    await _updateDonationRecord(caller, _amount);
   };
 
   public shared({ caller }) func doTask(_id : Nat) : async() {
-    let (is_there, gain) = await _checkExistingTask(_id);
-    if (is_there) {
-      await _addCompletedTask(caller, _id);
+    let gain = await _checkExistingTaskAndGetPoint(_id);
+    let (available, tasks) = await _checkAvailableTask(caller, _id);
+    if (available) {
+      await _addCompletedTask(caller, tasks, _id);
       await _mintPoint(caller, gain);
+    }
+    else {
+      throw Error.reject("Reentrant tasks are not allowed.")
     }
   };
 
-  public shared({ caller }) func addToBookmark(_id : Nat) : async(){
-      await _addBookToUserBookmark(caller, _id);
+  public shared({ caller }) func addToBookmark(_id : Nat) : async() {
+    await _checkExistingBookById(_id);
+    let (available, bookmarks) = await _checkAvailableBookmark(caller, _id);
+    if (available) {
+      await _addBookToUserBookmark(caller, bookmarks, _id);
+    }
+    else  {
+      throw Error.reject("Reentrant bookmarks are not allowed.")
+    }
   };
 
-  public shared({ caller }) func removeFromBookmark(_id : Nat) : async(){
+  public shared({ caller }) func removeFromBookmark(_id : Nat) : async() {
+    await _checkExistingBookById(_id);
+    let (available, bookmarks) = await _checkAvailableBookmark(caller, _id);
+    if (not available) {
       await _removeBookFromUserBookmark(caller, _id);
+    }
+    else {
+      throw Error.reject("Book not found in bookmarks.")
+    }
   };
 
   public shared({ caller }) func addBook(title: Text, synopsis: Text, year: Nat, genre: Text, cover: Text, file: Text) : async() {
@@ -67,6 +89,40 @@ actor {
     await _onlyOwner(_key);
     await _checkTaskInput(_name, _url, _point);
     await _addTaskInput(_name, _url, _point);
+  };
+
+  public query func getTasks() : async([Task]) {
+    return tasks;
+  };
+
+  public query func getGenres() : async([Text]) {
+    return genres;
+  };
+
+  public query func getBooks() : async([Book]) {
+    return books;
+  };
+
+  public query func getDonationAmount(_user : Principal) : async(Nat) {
+    return switch(donation_amount.get(_user)) {
+      case (?amount) { amount; };
+      case (null) { 0; };
+    }
+  };
+
+  public query func getDonationTotal(_user : Principal) : async(Nat) {
+    return switch(donation_total.get(_user)) {
+      case (?total) { total; };
+      case (null) { 0; };
+    }
+  };
+
+  public query func getUploadedBooks(_user: Principal) : async [Book] {
+    let userBooks = Array.filter<Book>(books, func (book: Book) : Bool {
+        book.author == _user
+    });
+
+    return userBooks;
   };
 
   public query func getBookReaders(_title : Text) : async(Nat) {
@@ -83,14 +139,6 @@ actor {
     }
   };
 
-  public query func getTasks() : async([Task]) {
-    return tasks;
-  };
-
-  public query func getGenres() : async([Text]) {
-    return genres;
-  };
-
   public query func getCompletedTasks(_user : Principal) : async([Nat]) {
     return switch (completed_tasks.get(_user)) {
       case (?complete) { complete };
@@ -105,24 +153,12 @@ actor {
     };
   };
 
-  public query func getBooks() : async([Book]) {
-    return books;
-  };
-
   public query func getBookmarks(_user : Principal) : async([Nat]) {
     return switch (user_bookmarks.get(_user)) {
       case (?bookmarks) { bookmarks };
       case (null) { []; };
     }
   };
-
-public query func getUploadedBooks(_user: Principal) : async [Book] {
-    let userBooks = Array.filter<Book>(books, func (book: Book) : Bool {
-        book.author == _user
-    });
-
-    return userBooks;
-};
 
   private func _onlyOwner(_key : Text) : async() {
     if (key == "") {
@@ -152,12 +188,64 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     };
   };
 
-  private func _checkExistingTask(_id : Nat) : async(Bool, Nat) {
-    return switch (Array.find<Task>(tasks, func(x : Task) {
-      x.id == _id;
+  private func _checkExistingTaskAndGetPoint(_id : Nat) : async(Nat) {
+    return switch (Array.find<Task>(tasks, func(task : Task) {
+      task.id == _id;
     })) {
-      case (?founded) { (true, founded.point); };
+      case (?founded) { founded.point; };
       case (null) { throw Error.reject("Task id not found."); };
+    };
+  };
+
+  private func _checkExistingBookById(_id : Nat) : async() {
+    return switch (Array.find<Book>(books, func (book : Book) {
+      book.id == _id
+    })) {
+      case (null) { throw Error.reject("Book id not found.") };
+      case (?_) { };
+    }
+  };
+
+  private func _checkExistingBookByTitle(_title : Text) : async() {
+    return switch (Array.find<Book>(books, func (book : Book) {
+      book.title == _title
+    })) {
+      case (null) { throw Error.reject("Book title not found.") };
+      case (?_) { };
+    }
+  };
+
+  private func _checkAvailableTask(_user : Principal, _id : Nat) : async(Bool, [Nat]) {
+    return switch (completed_tasks.get(_user)) {
+      case (?completed) {
+        let find = Array.find<Nat>(completed, func(id : Nat) : Bool {
+          id == _id
+        });
+        if (find == null) {
+          (true, completed)
+        }
+        else {
+          (false, [])
+        }
+      };
+      case (null) { (true, []) }
+    }
+  };
+
+  private func _checkAvailableBookmark(_user : Principal, _id : Nat) : async(Bool, [Nat]) {
+    return switch (user_bookmarks.get(_user)) {
+      case (?books) { 
+        let find = Array.find<Nat>(books, func(id : Nat) : Bool {
+          id == _id
+        });
+        if (find == null) {
+          (true, books)
+        }
+        else {
+          (false, [])
+        }
+      };
+      case (null) { (true, []) };
     };
   };
 
@@ -168,7 +256,7 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
   };
 
   private func _readBook(_title : Text) : async() {
-    let book_exist = Array.find<Book>(books, func(x : Book) { x.title== _title });
+    let book_exist = Array.find<Book>(books, func(x : Book) { x.title == _title });
     if (book_exist == null) {
       throw Error.reject("Book not found.");
     };
@@ -182,6 +270,29 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
         book_readers.put(_title, 1);
       }
     }
+  };
+
+  private func _updateDonationRecord(_user : Principal, _amount : Nat) : async() {
+    await _updateDonationTotal(_user);
+    await _updateDonationAmount(_user, _amount);
+  };
+
+  private func _updateDonationTotal(_user : Principal) : async() {
+    let current_total = switch (donation_total.get(_user)) {
+      case (?points) { points };
+      case (null) { 0 };
+    };
+    let updated_total = current_total + 1;
+    donation_total.put(_user, updated_total);
+  };
+
+  private func _updateDonationAmount(_user : Principal, _amount : Nat) : async() {
+    let current_amount = switch (donation_amount.get(_user)) {
+      case (?points) { points };
+      case (null) { 0 };
+    };
+    let updated_amount = current_amount + _amount;
+    donation_amount.put(_user, updated_amount);
   };
 
   private func _addBookInput(_title : Text, _synopsis : Text, _year : Nat, _genre : Text, _author : Principal, _cover : Text, _file : Text) : async(){
@@ -212,13 +323,14 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
     current_book.put(_user, _title);
   };
 
-  private func _addCompletedTask(_user : Principal, _id : Nat) : async() {
-    let completed = switch(completed_tasks.get(_user)) {
-      case (?tasks) { tasks };
-      case (null) { [] };
-    };
-    let updated = Array.append(completed, [_id]);
+  private func _addCompletedTask(_user : Principal, _tasks : [Nat], _id : Nat) : async() {
+    let updated = Array.append(_tasks, [_id]);
     completed_tasks.put(_user, updated); 
+  };
+  
+  private func _addBookToUserBookmark(_user : Principal, _bookmarks : [Nat], _id : Nat) : async() {
+    let updated = Array.append(_bookmarks, [_id]);
+    user_bookmarks.put(_user, updated);
   };
 
   private func _transferPoint(_from : Principal, _to : Principal, _amount : Nat) : async() {
@@ -250,15 +362,6 @@ public query func getUploadedBooks(_user: Principal) : async [Book] {
       case (?points) { points };
       case (null) { 0 };
       };
-  };  
-
-  private func _addBookToUserBookmark(_user : Principal, _id : Nat) : async() {
-    let bookmarks = switch (user_bookmarks.get(_user)) {
-      case (?books) { books };
-      case (null) { [] };
-    };
-      let updated = Array.append(bookmarks, [_id]);
-      user_bookmarks.put(_user, updated);
   };
 
   private func _removeBookFromUserBookmark(_user: Principal, _id: Nat) : async () {

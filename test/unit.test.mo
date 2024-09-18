@@ -3,8 +3,8 @@ import Principal "mo:base/Principal";
 import Error "mo:base/Error";
 import Actor "../src/canister_backend/main";
 
-let user = Principal.fromText("ihmrf-7yaaa");
-let author = Principal.fromText("wo5qg-ysjiq-5da");
+let alice = Principal.fromText("ihmrf-7yaaa");
+let bob = Principal.fromText("wo5qg-ysjiq-5da");
 
 await test("successfully add task and do task", func() : async() {
     let instance = await Actor.Main();
@@ -12,9 +12,9 @@ await test("successfully add task and do task", func() : async() {
     await instance.addTask("Dolor sit amet", "https://lorem", 10, "Joren");
     await instance.doTask(1);
     let tasks = await instance.getTasks();
-    let completed = await instance.getCompletedTasks(author);
+    let completed = await instance.getCompletedTasks(bob);
     let completed_index = completed[0];
-    let userPoint = await instance.getPoints(author);
+    let userPoint = await instance.getPoints(bob);
     assert(2 == tasks.size());
     assert(1 == completed.size());
     assert(1 == completed_index);
@@ -24,18 +24,22 @@ await test("successfully add task and do task", func() : async() {
 await test("successfully donate", func() : async() {
     let instance = await Actor.Main();
     await instance.dummyMint(100);
-    await instance.donateToAuthor(user, 50);
-    let receiverPoint = await instance.getPoints(user);
-    let senderPoint = await instance.getPoints(author);
+    await instance.donateToAuthor(alice, 50);
+    let receiverPoint = await instance.getPoints(alice);
+    let senderPoint = await instance.getPoints(bob);
+    let senderDonationTotal = await instance.getDonationTotal(bob);
+    let senderDonationAmount = await instance.getDonationAmount(bob);
     assert(50 == receiverPoint);
     assert(50 == senderPoint);
+    assert(1 == senderDonationTotal);
+    assert(50 == senderDonationAmount);
 });
 
 await test("successfully get current book", func() : async() {
     let instance = await Actor.Main();
     await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
     await instance.readBook("Test");
-    let (is_there, current_book) = await instance.getCurrentBook(author);
+    let (is_there, current_book) = await instance.getCurrentBook(bob);
     let book_readers = await instance.getBookReaders("Test");
     if (is_there) {
         assert("Test" == current_book);
@@ -50,7 +54,7 @@ await test("succesfully throw insufficient points", func() : async() {
     try {
         let instance = await Actor.Main();
         await instance.dummyMint(50);
-        await instance.donateToAuthor(user, 100);
+        await instance.donateToAuthor(alice, 100);
     }
     catch (err) {
         let message = Error.message(err);
@@ -92,10 +96,59 @@ await test("successfully throw task id not found", func() : async() {
     }
 });
 
+await test("successfully throw reentrant task are not allowed", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.addTask("Lorem ipsum", "https://lorem", 20, "Joren");
+        await instance.doTask(0);
+        await instance.doTask(0);
+    }
+    catch(err) {
+        let message = Error.message(err);
+        assert(message == "Reentrant tasks are not allowed.");
+    }
+});
+
+await test("successfully throw book id not found", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.addToBookmark(0);
+        assert(true == true);
+    }
+    catch (err) {
+        let message = Error.message(err);
+        assert(message == "Book id not found.");
+    }
+});
+
+await test("successfully throw book title not found", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.readBook("A");
+    }
+    catch (err) {
+        let message = Error.message(err);
+        assert(message == "Book title not found.");
+    }
+});
+
+await test("successfully throw reentrant bookmarks are not allowed", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        await instance.addToBookmark(0);
+        await instance.addToBookmark(0);
+    }
+    catch(err) {
+        let message = Error.message(err);
+        assert(message == "Reentrant bookmarks are not allowed.");
+    }
+});
+
 await test("successfully add a book and get books", func() : async() {
         let instance = await Actor.Main();
         await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
-        let uploaded = await instance.getUploadedBooks(author);
+        let uploaded = await instance.getUploadedBooks(bob);
         assert(uploaded.size() == 1);
         await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
         let allbooks = await instance.getBooks();
@@ -104,18 +157,19 @@ await test("successfully add a book and get books", func() : async() {
 
 await test("successfully added a book to bookmarks", func() : async() {
         let instance = await Actor.Main();
-        await instance.addToBookmark(1);
-        let bookmarked = await instance.getBookmarks(author);
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        await instance.addToBookmark(0);
+        let bookmarked = await instance.getBookmarks(bob);
         assert(bookmarked.size() == 1);
 });
 
 await test("removed book from bookmarks", func() : async() {
         let instance = await Actor.Main();
         await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
-        await instance.addToBookmark(1);
-        let bookmarked = await instance.getBookmarks(author);
-        await instance.removeFromBookmark(1);
-        let removed = await instance.getBookmarks(author);
+        await instance.addToBookmark(0);
+        let bookmarked = await instance.getBookmarks(bob);
+        await instance.removeFromBookmark(0);
+        let removed = await instance.getBookmarks(bob);
         assert(bookmarked.size() == 1);
         assert(removed.size() == 0);
 }); 
