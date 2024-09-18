@@ -145,6 +145,18 @@ await test("successfully throw reentrant bookmarks are not allowed", func() : as
     }
 });
 
+await test("successfully throw book not found in bookmarks", func() : async() {
+    try {
+        let instance = await Actor.Main();
+        await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
+        await instance.removeFromBookmark(0);
+    }
+    catch (err) {
+        let message = Error.message(err);
+        assert(message == "Book not found in bookmarks.")
+    }
+});
+
 await test("successfully add a book and get books", func() : async() {
         let instance = await Actor.Main();
         await instance.addBook("Test", "Text", 2000, "Text", "Text", "Text");
